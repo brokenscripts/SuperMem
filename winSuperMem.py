@@ -1,5 +1,6 @@
+#!/usr/bin/python3
 ###############################################################################
-## SuperMem for Windows Memory Analysis v1.0
+## SuperMem for Windows Memory Analysis v1.0.1
 ## Written by James Lovato - CrowdStrike
 ## Copyright 2021 CrowdStrike, Inc.
 ###############################################################################
@@ -20,17 +21,18 @@ import sys
 from termcolor import colored
 
 # Globals Likely Needing Updated
-THREADCOUNT = 12
-EVTXTRACTPATH = "/usr/local/bin/evtxtract"
-VOL3PATH = "/usr/bin/vol3"
-VOL2PATH = "/usr/bin/vol.py"
-VOL2EXTRAPLUGINS = "/usr/share/volatility/plugins/community/"
+THREADCOUNT = 24
+EVTXTRACTPATH = "/home/remnux/.local/bin/evtxtract"
+VOL3PATH = "/usr/local/bin/vol3"
+VOL2PATH = "/usr/local/bin/vol.py"
+VOL2EXTRAPLUGINS = "/opt/vol2_extra_plugins/"
 BULKPATH = "/usr/bin/bulk_extractor"
 LOG2TIMELINEPATH = "/usr/bin/log2timeline.py"
 PSORTPATH = "/usr/bin/psort.py"
 YARAPATH = "/usr/bin/yara"
-STRINGSPATH = "/bin/strings"
-YARARULESFILE = "/path/to/yara/Yarafile.txt"
+STRINGSPATH = "/usr/bin/strings"
+YARARULESFILE = "/opt/yara_rules_repo_index.yar"        # Default Yara-Rules has too much junk.  Clean the rules to run up.
+YARARULESFILE2 = "/opt/yara_signatures_repo_index.yar"  # Quality repo, low false positives
 
 # Globals for Output Files and Paths
 VOL3outputDir = "Volatility3"
@@ -49,50 +51,103 @@ PLASOOUTPUT = "Plaso"
 YARAoutputDir = "Yara"
 
 # Volatility3 Plugins for Quick Triage
-QUICKTRIAGEPLUGINS = [{"plugin": "windows.pstree.PsTree", "params": ""},
-                      {"plugin": "windows.cmdline.CmdLine", "params": ""},
-                      {"plugin": "windows.callbacks.Callbacks", "params": ""},
-                      {"plugin": "windows.svcscan.SvcScan", "params": ""},
-                      {"plugin": "windows.registry.userassist.UserAssist", "params": ""},
-                      {"plugin": "windows.envars.Envars", "params": ""},
-                      {"plugin": "windows.handles.Handles", "params": ""},
-                      {"plugin": "windows.modules.Modules", "params": ""},
-                      {"plugin": "windows.dlllist.DllList", "params": ""},
-                      {"plugin": "windows.getsids.GetSIDs", "params": ""},
-                      {"plugin": "windows.getservicesids.GetServiceSIDs", "params": ""},
-                      {"plugin": "windows.malfind.Malfind", "params": ""},
-                      {"plugin": "windows.pslist.PsList", "params": ""},
-                      {"plugin": "windows.registry.hivelist.HiveList", "params": ""},
-                      {"plugin": "windows.ssdt.SSDT", "params": ""},
-                      {"plugin": "windows.registry.hivescan.HiveScan", "params": ""}]
+QUICKTRIAGEPLUGINS = [
+    {"plugin": "windows.pstree.PsTree", "params": ""},
+    {"plugin": "windows.cmdline.CmdLine", "params": ""},
+    {"plugin": "windows.callbacks.Callbacks", "params": ""},
+    {"plugin": "windows.svcscan.SvcScan", "params": ""},
+    {"plugin": "windows.malfind.Malfind", "params": ""},
+    {"plugin": "windows.pslist.PsList", "params": ""},
+    {"plugin": "windows.netscan.NetScan", "params": ""},
+    {"plugin": "windows.netstat.NetStat", "params": ""},
+    {"plugin": "windows.psscan.PsScan", "params": ""},
+    {"plugin": "windows.registry.userassist.UserAssist", "params": ""},
+    {"plugin": "windows.envars.Envars", "params": ""},
+    {"plugin": "windows.handles.Handles", "params": ""},
+    {"plugin": "windows.modules.Modules", "params": ""},
+    {"plugin": "windows.dlllist.DllList", "params": ""},
+    {"plugin": "windows.getsids.GetSIDs", "params": ""},
+    {"plugin": "windows.getservicesids.GetServiceSIDs", "params": ""},
+    {"plugin": "windows.registry.hivelist.HiveList", "params": ""},
+    {"plugin": "windows.ssdt.SSDT", "params": ""},
+    {"plugin": "windows.registry.hivescan.HiveScan", "params": ""}
+]
 
 # Volatility3 Plugins for Full Triage
-FULLTRIAGEPLUGINS = [{"plugin": "windows.modscan.ModScan", "params": ""},
-                     {"plugin": "windows.mutantscan.MutantScan", "params": ""},
-                     {"plugin": "windows.psscan.PsScan", "params": ""},
-                     {"plugin": "windows.driverscan.DriverScan", "params": ""},
-                     {"plugin": "windows.symlinkscan.SymlinkScan", "params": ""},
-                     {"plugin": "windows.driverirp.DriverIrp", "params": ""},
-                     {"plugin": "windows.netscan.NetScan", "params": ""},
-                     {"plugin": "windows.filescan.FileScan", "params": ""},
-                     {"plugin": "windows.poolscanner.PoolScanner", "params": ""}]
+FULLTRIAGEPLUGINS = [
+    {"plugin": "windows.modscan.ModScan", "params": ""},
+    {"plugin": "windows.mutantscan.MutantScan", "params": ""},
+    {"plugin": "windows.driverscan.DriverScan", "params": ""},
+    {"plugin": "windows.symlinkscan.SymlinkScan", "params": ""},
+    {"plugin": "windows.driverirp.DriverIrp", "params": ""},
+    {"plugin": "windows.filescan.FileScan", "params": ""},
+    {"plugin": "windows.poolscanner.PoolScanner", "params": ""}
+]
 
 # Additional Volatility2 Plugins
-VOL2PLUGINS = [{"plugin": "amcache", "params": ""}, {"plugin": "getsids", "params": ""},
-               {"plugin": "clipboard", "params": ""},
-               {"plugin": "cmdscan", "params": ""}, {"plugin": "consoles", "params": ""},
-               {"plugin": "ldrmodules", "params": "--verbose"},
-               {"plugin": "mftparser", "params": "--output=body "}, {"plugin": "psxview", "params": "--apply-rules"},
-               {"plugin": "shellbags", "params": "--output=body"}, {"plugin": "shutdowntime", "params": ""},
-               {"plugin": "indx", "params": "--output=body"}, {"plugin": "logfile", "params": "--output=body"},
-               {"plugin": "prefetchparser", "params": "--full_paths"}, {"plugin": "schtasks", "params": ""},
-               {"plugin": "sessions", "params": ""}, {"plugin": "shimcachemem", "params": "--output=csv"},
-               {"plugin": "shimcache", "params": ""}, {"plugin": "sockets", "params": ""},
-               {"plugin": "sockscan", "params": ""}, {"plugin": "threads", "params": ""},
-               {"plugin": "usnjrnl", "params": "--output=body"}, {"plugin": "autoruns", "params": "-v"},
-               {"plugin": "connections", "params": ""}, {"plugin": "connscan", "params": ""},
-               {"plugin": "hollowfind", "params": ""}, {"plugin": "malthfind", "params": ""},
-               {"plugin": "timeliner", "params": "--output=body"}, {"plugin": "apihooks", "params": "--quick"}, {"plugin": "messagehooks", "params": ""}]
+VOL2PLUGINS = [
+    {"plugin": "cmdscan", "params": ""}, 
+    {"plugin": "sockets", "params": ""},
+    {"plugin": "sockscan", "params": ""}, 
+    {"plugin": "psxview", "params": "--apply-rules"},
+    {"plugin": "autoruns", "params": "-v"},
+    {"plugin": "connections", "params": ""}, 
+    {"plugin": "connscan", "params": ""},
+    {"plugin": "hollowfind", "params": ""}, 
+    {"plugin": "malthfind", "params": ""},
+    {"plugin": "cmdline", "params": ""}, 
+    {"plugin": "pslist", "params": ""}, 
+    {"plugin": "psscan", "params": ""}, 
+    {"plugin": "pstotal", "params": ""}, 
+    {"plugin": "pstree", "params": ""}, 
+    {"plugin": "svcscan", "params": ""}, 
+    {"plugin": "netscan", "params": ""}, 
+    {"plugin": "amcache", "params": ""}, 
+    {"plugin": "getsids", "params": ""},
+    {"plugin": "clipboard", "params": ""},
+    {"plugin": "consoles", "params": ""},
+    {"plugin": "ldrmodules", "params": "--verbose"},
+    {"plugin": "mftparser", "params": "--output=body "}, 
+    {"plugin": "shellbags", "params": "--output=body"}, 
+    {"plugin": "shutdowntime", "params": ""},
+    {"plugin": "indx", "params": "--output=body"}, 
+    {"plugin": "logfile", "params": "--output=body"},
+    {"plugin": "prefetchparser", "params": "--full_paths"}, 
+    {"plugin": "schtasks", "params": ""},
+    {"plugin": "sessions", "params": ""}, 
+    {"plugin": "shimcachemem", "params": "--output=csv"},
+    {"plugin": "shimcache", "params": ""}, 
+    {"plugin": "threads", "params": ""},
+    {"plugin": "usnjrnl", "params": "--output=body"}, 
+    {"plugin": "timeliner", "params": "--output=body"}, 
+    {"plugin": "apihooks", "params": "--quick"}, 
+    {"plugin": "messagehooks", "params": ""},
+    {"plugin": "chromecookies", "params": ""},
+    {"plugin": "chromedownloadchains", "params": ""},
+    {"plugin": "chromedownloads", "params": ""},
+    {"plugin": "chromehistory", "params": ""},
+    {"plugin": "chromesearchterms", "params": ""},
+    {"plugin": "chromevisits", "params": ""},
+    {"plugin": "dlllist", "params": ""}, 
+    {"plugin": "driverscan", "params": ""}, 
+    {"plugin": "envars", "params": ""}, 
+    {"plugin": "firefoxcookies", "params": ""}, 
+    {"plugin": "firefoxdownloads", "params": ""}, 
+    {"plugin": "firefoxhistory", "params": ""}, 
+    {"plugin": "getservicesids", "params": ""}, 
+    {"plugin": "ghostrat", "params": ""}, 
+    {"plugin": "handles", "params": ""}, 
+    {"plugin": "hivelist", "params": ""}, 
+    {"plugin": "iehistory", "params": ""}, 
+    {"plugin": "malfind", "params": ""}, 
+    {"plugin": "malfinddeep", "params": ""}, 
+    {"plugin": "malfofind", "params": ""}, 
+    {"plugin": "malprocfind", "params": ""}, 
+    {"plugin": "mimikatz", "params": ""}, 
+    {"plugin": "mutantscan", "params": ""}, 
+    {"plugin": "plugxscan", "params": ""}, 
+    {"plugin": "thrdscan", "params": ""} 
+]
 
 
 # Logic for Printing to Console and Logging with Progress Bars
@@ -322,7 +377,7 @@ def volatility2Queue(chosenPlugins, memFullPath, outputDir, vol2Profile):
             params = p['params']
             cmd = VOL2PATH + " --plugins=" + VOL2EXTRAPLUGINS + " -f " + '\"' + memFullPath + '\"' + " --profile=" \
                   + profile + " --kdbg=" + kdbg + " --dtb=" + dtb + " " + pluginName + " " + params + " --output-file=" \
-                  + os.path.join(vol2outputDir, pluginName + ".out") + " 2> " \
+                  + os.path.join(vol2outputDir, pluginName + ".txt") + " 2> " \
                   + os.path.join(vol2outputDir, pluginName + ".stderr") + " > " + os.path.join(vol2outputDir,
                                                                                             pluginName + ".stdout")
             data = {'Name': "Volatility2 plugin " + pluginName, 'CMD': cmd}
@@ -455,7 +510,7 @@ def runPlaso(outputDir, memFullPath):
     tlnOutputFullPath = os.path.join(plasoOutputPath, memFileName + ".tln")
 
     # Run Log2Timeline
-    cmd = LOG2TIMELINEPATH + " " + plasoOutputFullPath + " " + outputDir + " > /dev/null 2>&1"
+    cmd = LOG2TIMELINEPATH + " --storage-file " + plasoOutputFullPath + " " + outputDir + " > /dev/null 2>&1"
     runCMD(cmd, "Log2Timeline")
 
     # Run Psort on the Output
@@ -516,17 +571,29 @@ def runYara(outputDir):
     if not os.path.isdir(yaraOutput):
         os.mkdir(yaraOutput)
 
-    # Run Yara Across the Dumped Files
+    # Run Yara (Neo23x0 Rules) Across the Dumped Files
+    if os.path.isfile(YARARULESFILE2):
+        for directory in dumpModulesOutput, dumpProcessOutput, dumpDllsOutput:
+            cmd = YARAPATH + " -g -m -s -e --threads=" + str(THREADCOUNT) + " " + YARARULESFILE2 + " -r " + directory + \
+                  " 2> " + os.path.join(yaraOutput, "yara_signatures.stderr") + " > " + os.path.join(yaraOutput, "yara_signatures.stdout")
+
+            printLoggingLogic("Running Yara Scan on " + directory, False, "INFO")
+            runCMD(cmd, "Yara")
+    else:
+        printLoggingLogic("Cant Find File " + YARARULESFILE2, False, "ERROR", 'red')
+
+    """
+    # Run Yara (Yara-Rules) Across the Dumped Files
     if os.path.isfile(YARARULESFILE):
         for directory in dumpModulesOutput, dumpProcessOutput, dumpDllsOutput:
             cmd = YARAPATH + " -g -m -s -e --threads=" + str(THREADCOUNT) + " " + YARARULESFILE + " -r " + directory + \
-                  " 2> " + os.path.join(yaraOutput, "yara.stderr") + " > " + os.path.join(yaraOutput, "yara.stdout")
+                  " 2> " + os.path.join(yaraOutput, "yara_rules.stderr") + " > " + os.path.join(yaraOutput, "yara_rules.stdout")
 
             printLoggingLogic("Running Yara Scan on " + directory, False, "INFO")
             runCMD(cmd, "Yara")
     else:
         printLoggingLogic("Cant Find File " + YARARULESFILE, False, "ERROR", 'red')
-
+    """
 
 # Processing Logic
 def processing(triageType, memFullPath, outputDir, vol2Profile):
@@ -590,6 +657,30 @@ def processing(triageType, memFullPath, outputDir, vol2Profile):
 
         # Run Yara
         runYara(outputDir)
+
+# Cleanup routine
+def recursive_delete_if_empty(path):
+    """Recursively delete empty files and directories"""
+    # File cleanup
+    if not os.path.isdir(path):
+        # Find any empty files first to delete
+        if os.path.getsize(path) == 0:
+          os.remove(path)
+          return True
+        return False
+    """
+    Note that the list comprehension here is necessary, a
+    generator expression would shortcut and we don't want that!
+    """
+    # Directory cleanup
+    if all([recursive_delete_if_empty(os.path.join(path, filename))
+            for filename in os.listdir(path)]):
+        # Either there was nothing here or it was all deleted
+        os.rmdir(path)
+        return True
+    else:
+        return False 
+
 
 
 # Main Function
