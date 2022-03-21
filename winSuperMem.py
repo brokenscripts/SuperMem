@@ -21,8 +21,8 @@ import sys
 from termcolor import colored
 
 # Globals Likely Needing Updated
-THREADCOUNT = 24
-EVTXTRACTPATH = "/home/remnux/.local/bin/evtxtract"
+THREADCOUNT = 8
+EVTXTRACTPATH = "/usr/local/bin/evtxtract"
 VOL3PATH = "/usr/local/bin/vol3"
 VOL2PATH = "/usr/local/bin/vol.py"
 VOL2EXTRAPLUGINS = "/opt/vol2_extra_plugins/"
@@ -31,8 +31,11 @@ LOG2TIMELINEPATH = "/usr/bin/log2timeline.py"
 PSORTPATH = "/usr/bin/psort.py"
 YARAPATH = "/usr/bin/yara"
 STRINGSPATH = "/usr/bin/strings"
-YARARULESFILE = "/opt/yara_rules_repo_index.yar"        # Default Yara-Rules has too much junk.  Clean the rules to run up.
-YARARULESFILE2 = "/opt/yara_signatures_repo_index.yar"  # Quality repo, low false positives
+YARARULES_LIST = [
+    "/opt/yara_rules_repo_index.yar",                   # Default Yara-Rules has too much junk.  Clean the rules to run up.
+    "/opt/yara_signatures_repo_index.yar",              # Quality repo, low false positives
+    "/opt/yara_jpcert_index.yar"                        # Quality repo
+    ]
 
 # Globals for Output Files and Paths
 VOL3outputDir = "Volatility3"
@@ -113,7 +116,6 @@ VOL2PLUGINS = [
     {"plugin": "indx", "params": "--output=body"}, 
     {"plugin": "logfile", "params": "--output=body"},
     {"plugin": "prefetchparser", "params": "--full_paths"}, 
-    {"plugin": "schtasks", "params": ""},
     {"plugin": "sessions", "params": ""}, 
     {"plugin": "shimcachemem", "params": "--output=csv"},
     {"plugin": "shimcache", "params": ""}, 
@@ -571,29 +573,19 @@ def runYara(outputDir):
     if not os.path.isdir(yaraOutput):
         os.mkdir(yaraOutput)
 
-    # Run Yara (Neo23x0 Rules) Across the Dumped Files
-    if os.path.isfile(YARARULESFILE2):
-        for directory in dumpModulesOutput, dumpProcessOutput, dumpDllsOutput:
-            cmd = YARAPATH + " -g -m -s -e --threads=" + str(THREADCOUNT) + " " + YARARULESFILE2 + " -r " + directory + \
-                  " 2> " + os.path.join(yaraOutput, "yara_signatures.stderr") + " > " + os.path.join(yaraOutput, "yara_signatures.stdout")
+    # Run any yara rules / index of yara rules in the YARARULES_LIST
+    for yara_index in YARARULES_LIST:
+        if os.path.isfile(yara_index):
+            for directory in dumpModulesOutput, dumpProcessOutput, dumpDllsOutput:
+                cmd = YARAPATH + " -g -m -s -e -w --threads=" + str(THREADCOUNT) + " " + yara_index + " -r " + directory + \
+                    " 2> " + os.path.join(yaraOutput, os.path.basename(yara_index).split('.')[0]+".stderr") + " > " + \
+                        os.path.join(yaraOutput, os.path.basename(yara_index).split('.')[0]+".txt")
 
-            printLoggingLogic("Running Yara Scan on " + directory, False, "INFO")
-            runCMD(cmd, "Yara")
-    else:
-        printLoggingLogic("Cant Find File " + YARARULESFILE2, False, "ERROR", 'red')
+                printLoggingLogic("Running Yara Scan on " + directory, False, "INFO")
+                runCMD(cmd, "Yara")
+        else:
+            printLoggingLogic("Cant Find File " + yara_index, False, "ERROR", 'red')
 
-    """
-    # Run Yara (Yara-Rules) Across the Dumped Files
-    if os.path.isfile(YARARULESFILE):
-        for directory in dumpModulesOutput, dumpProcessOutput, dumpDllsOutput:
-            cmd = YARAPATH + " -g -m -s -e --threads=" + str(THREADCOUNT) + " " + YARARULESFILE + " -r " + directory + \
-                  " 2> " + os.path.join(yaraOutput, "yara_rules.stderr") + " > " + os.path.join(yaraOutput, "yara_rules.stdout")
-
-            printLoggingLogic("Running Yara Scan on " + directory, False, "INFO")
-            runCMD(cmd, "Yara")
-    else:
-        printLoggingLogic("Cant Find File " + YARARULESFILE, False, "ERROR", 'red')
-    """
 
 # Processing Logic
 def processing(triageType, memFullPath, outputDir, vol2Profile):
@@ -658,15 +650,28 @@ def processing(triageType, memFullPath, outputDir, vol2Profile):
         # Run Yara
         runYara(outputDir)
 
+
 # Cleanup routine
-def recursive_delete_if_empty(path):
-    """Recursively delete empty files and directories"""
+def recursive_delete_if_empty(outputDir):
+    """Takes in a base path and then recursively delete empty files and directories starting from base path"""
+    path = outputDir
     # File cleanup
     if not os.path.isdir(path):
         # Find any empty files first to delete
         if os.path.getsize(path) == 0:
-          os.remove(path)
-          return True
+            os.remove(path)
+            printLoggingLogic("Removing empty file: " + path, False, "INFO")
+            return True
+        if os.path.getsize(path) <= 1000:
+            with open(path, 'rb') as f:
+                file_check = f.readlines()
+            if file_check[0].startswith(b'Volatility 3') and file_check[-1].startswith(b'Progress:  100') or file_check[-1].split(b'\t')[-1].startswith(b'PDB scanning finished'):
+                os.remove(path)
+            elif file_check[0].startswith(b'Volatility Foundation') and file_check[-1].startswith(b'  from cryptography.hazmat.backends.openssl') or file_check[-1].startswith(b'ERROR   : volatility.debug    : This command does not support the profile'):
+                os.remove(path)
+            elif file_check[0].startswith(b'Outputting to:') and file_check[0] == file_check[-1]:
+                os.remove(path)
+            return True
         return False
     """
     Note that the list comprehension here is necessary, a
@@ -675,12 +680,36 @@ def recursive_delete_if_empty(path):
     # Directory cleanup
     if all([recursive_delete_if_empty(os.path.join(path, filename))
             for filename in os.listdir(path)]):
-        # Either there was nothing here or it was all deleted
-        os.rmdir(path)
+        # Either there was nothing here, then it was all deleted
+        printLoggingLogic("Removing empty directory: " + path, False, "INFO")
+        try:
+            os.rmdir(path)
+        except:
+            pass
         return True
     else:
         return False 
 
+
+def recursive_remove_outpath_from_files(path, outputDir):
+    """Takes in a base path and then removes instances of the output path in the file extensions below - Fixes annoying noise in timeline and volatility outputs based on naming"""
+    if not os.path.isdir(path):
+        if path.endswith('.txt') or path.endswith('.csv') or path.endswith('.stdout') or path.endswith('.stderr') or path.endswith('.tln'):
+            # Ensure the file size is less than 1GB, so we don't crush the RAM like Chrome
+            if os.path.getsize(path) <= 1073741824:
+                with open(path, "rb") as f:
+                    data = f.read()
+                    if outputDir.encode('utf-8') in data:
+                        printLoggingLogic("Removing output directory in file: " + path, False, "INFO")
+                        data = re.sub(outputDir.encode('utf-8'), b'.', data, flags=re.MULTILINE)
+                with open(path, "wb") as f:
+                    f.write(data)
+                    return True
+        return False
+    if all([recursive_remove_outpath_from_files(os.path.join(path, filename), outputDir) for filename in os.listdir(path)]):
+        return True
+    else:
+        return False 
 
 
 # Main Function
@@ -733,6 +762,12 @@ def main():
 
     # Start Processing
     processing(triageType, memFullPath, outputDir, vol2Profile)
+    # Cleanup
+    printLoggingLogic("**************************", False, "INFO", "blue")
+    printLoggingLogic("Cleaning up Output Directory: " + outputDir, False, "INFO", "blue")
+    printLoggingLogic("**************************", False, "INFO", "blue")
+    recursive_delete_if_empty(outputDir)
+    recursive_remove_outpath_from_files(outputDir, outputDir)
     executionTime = (time.time() - startTime)
     printLoggingLogic("Finished all processing in " + str(int(executionTime / 60)) + " minutes", False, "INFO", "blue")
 

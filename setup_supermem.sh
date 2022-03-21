@@ -58,9 +58,11 @@ cd bulk_extractor/
 make
 make install
 
-#Downloading YARA rules 
+#Downloading YARA rules and Florian Roth's signature base, and JPCERT's rules
 cd /opt/
 git clone --recursive https://github.com/Yara-Rules/rules.git
+git clone --recursive https://github.com/Neo23x0/signature-base.git
+git clone --recursive https://github.com/JPCERTCC/jpcert-yara.git
 
 #Setting up SuperMem
 git clone https://github.com/CrowdStrike/SuperMem.git

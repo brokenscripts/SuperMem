@@ -2,7 +2,7 @@
 Expected location of this file is: /opt/yara_rules_repo_index.yar
 Yara-Rules: https://github.com/Yara-Rules/rules
 */
-include "/opt/rules/crypto/crypto_signatures.yar"
+//include "/opt/rules/crypto/crypto_signatures.yar"
 include "/opt/rules/cve_rules/CVE-2010-0805.yar"
 include "/opt/rules/cve_rules/CVE-2010-0887.yar"
 include "/opt/rules/cve_rules/CVE-2010-1297.yar"
@@ -465,10 +465,10 @@ include "/opt/rules/malware/TOOLKIT_THOR_HackTools.yar"
 include "/opt/rules/malware/TOOLKIT_Wineggdrop.yar"
 include "/opt/rules/malware/TOOLKIT_exe2hex_payload.yar"
 include "/opt/rules/packers/JJencode.yar"
-include "/opt/rules/packers/Javascript_exploit_and_obfuscation.yar"
-include "/opt/rules/packers/packer.yar"
-include "/opt/rules/packers/packer_compiler_signatures.yar"
-include "/opt/rules/packers/peid.yar"
+//include "/opt/rules/packers/Javascript_exploit_and_obfuscation.yar"
+//include "/opt/rules/packers/packer.yar"
+//include "/opt/rules/packers/packer_compiler_signatures.yar"
+// include "/opt/rules/packers/peid.yar"
 include "/opt/rules/packers/tweetable-polyglot-png.yar"
 include "/opt/rules/webshells/WShell_APT_Laudanum.yar"
 include "/opt/rules/webshells/WShell_ASPXSpy.yar"
